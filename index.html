@@ -1,0 +1,131 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2575.3">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html lang="es"&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta charset="UTF-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;title&gt;WebSocket Test&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>body {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>font-family: Arial, sans-serif;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>max-width: 600px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>margin: 0 auto;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>padding: 20px;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>#status {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>margin: 10px 0;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>padding: 10px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 4px;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>.connected {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>background-color: #d4edda;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>color: #155724;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>.disconnected {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>background-color: #f8d7da;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>color: #721c24;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>.message-log {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>border: 1px solid #ddd;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>padding: 10px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>height: 200px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>overflow-y: auto;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>margin-bottom: 10px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 4px;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>button {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>background-color: #007bff;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>color: white;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>border: none;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>padding: 10px 15px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 4px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>cursor: pointer;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>button:hover {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>background-color: #0069d9;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/style&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;h1&gt;Test de WebSocket&lt;/h1&gt;</p>
+<p class="p2"><span class="Apple-converted-space">    </span></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div id="status" class="disconnected"&gt;Desconectado&lt;/div&gt;</p>
+<p class="p2"><span class="Apple-converted-space">    </span></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="message-log" id="messageLog"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;p&gt;Registro de mensajes:&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p2"><span class="Apple-converted-space">    </span></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;button id="sendButton"&gt;Enviar "hola mundo"&lt;/button&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;script&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Elementos del DOM</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const statusElement = document.getElementById('status');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const messageLogElement = document.getElementById('messageLog');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const sendButton = document.getElementById('sendButton');</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Crear la conexión WebSocket</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const socket = new WebSocket('ws://localhost:8080/ws');</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Gestionar la apertura de la conexión</p>
+<p class="p1"><span class="Apple-converted-space">        </span>socket.onopen = function(event) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>statusElement.textContent = 'Conectado';</p>
+<p class="p1"><span class="Apple-converted-space">            </span>statusElement.className = 'connected';</p>
+<p class="p1"><span class="Apple-converted-space">            </span>logMessage('Conexión establecida');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>};</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Gestionar los mensajes recibidos</p>
+<p class="p1"><span class="Apple-converted-space">        </span>socket.onmessage = function(event) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>logMessage(`Recibido: ${event.data}`);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>};</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Gestionar errores</p>
+<p class="p1"><span class="Apple-converted-space">        </span>socket.onerror = function(error) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>logMessage('Error en la conexión');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>console.error('Error WebSocket:', error);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>};</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Gestionar el cierre de la conexión</p>
+<p class="p1"><span class="Apple-converted-space">        </span>socket.onclose = function(event) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>statusElement.textContent = 'Desconectado';</p>
+<p class="p1"><span class="Apple-converted-space">            </span>statusElement.className = 'disconnected';</p>
+<p class="p1"><span class="Apple-converted-space">            </span>logMessage(`Conexión cerrada. Código: ${event.code}`);</p>
+<p class="p2"><span class="Apple-converted-space">            </span></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// Si quieres intentar reconectar automáticamente, puedes añadir código aquí</p>
+<p class="p1"><span class="Apple-converted-space">        </span>};</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Función para enviar "hola mundo"</p>
+<p class="p1"><span class="Apple-converted-space">        </span>sendButton.addEventListener('click', function() {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (socket.readyState === WebSocket.OPEN) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>socket.send('hola mundo');</p>
+<p class="p1"><span class="Apple-converted-space">                </span>logMessage('Enviado: hola mundo');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>logMessage('No se puede enviar: la conexión no está abierta');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>});</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Función para añadir mensajes al registro</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function logMessage(message) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const messageElement = document.createElement('div');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>messageElement.textContent = `${new Date().toLocaleTimeString()}: ${message}`;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>messageLogElement.appendChild(messageElement);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>// Auto-scroll al final</p>
+<p class="p1"><span class="Apple-converted-space">            </span>messageLogElement.scrollTop = messageLogElement.scrollHeight;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>
