@@ -3,83 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket Test</title>
+    <title>Genesys Cloud WebSocket Test</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 600px;
+            max-width: 800px;
             margin: 0 auto;
             padding: 20px;
+            line-height: 1.6;
+        }
+        header {
+            background-color: #0F3A5D;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            margin: 0;
+            font-size: 24px;
         }
         #status {
-            margin: 10px 0;
-            padding: 10px;
+            margin: 15px 0;
+            padding: 12px;
             border-radius: 4px;
+            font-weight: bold;
         }
         .connected {
             background-color: #d4edda;
             color: #155724;
+            border: 1px solid #c3e6cb;
         }
         .disconnected {
             background-color: #f8d7da;
             color: #721c24;
+            border: 1px solid #f5c6cb;
         }
         .message-log {
             border: 1px solid #ddd;
-            padding: 10px;
-            height: 200px;
+            padding: 15px;
+            height: 300px;
             overflow-y: auto;
-            margin-bottom: 10px;
+            margin-bottom: 20px;
             border-radius: 4px;
+            background-color: #f9f9f9;
+            font-family: monospace;
+        }
+        .log-entry {
+            border-bottom: 1px solid #eee;
+            padding: 5px 0;
+        }
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.85em;
+        }
+        .control-panel {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
         }
         button {
-            background-color: #007bff;
+            background-color: #0F3A5D;
             color: white;
             border: none;
             padding: 10px 15px;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
         }
         button:hover {
-            background-color: #0069d9;
+            background-color: #0a2c47;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .json-display {
+            padding: 15px;
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <h1>Test de WebSocket</h1>
+    <header>
+        <h1>Genesys Cloud WebSocket Test</h1>
+    </header>
     
     <div id="status" class="disconnected">Desconectado</div>
     
-    <div class="message-log" id="messageLog">
-        <p>Registro de mensajes:</p>
+    <div class="control-panel">
+        <button id="sendButton">Enviar mensaje de apertura</button>
     </div>
     
-    <button id="sendButton">Enviar "hola mundo"</button>
+    <h2>Registro de comunicación</h2>
+    <div class="message-log" id="messageLog">
+        <div class="log-entry">Esperando conexión WebSocket...</div>
+    </div>
+    
+    <div class="json-display" id="currentMessage">
+        // Aquí se mostrará el último mensaje enviado o recibido
+    </div>
 
     <script>
         // Elementos del DOM
         const statusElement = document.getElementById('status');
         const messageLogElement = document.getElementById('messageLog');
         const sendButton = document.getElementById('sendButton');
+        const currentMessageElement = document.getElementById('currentMessage');
         
         // Crear la conexión WebSocket
         const socket = new WebSocket('ws://localhost:8080/ws');
+        
+        // Obtener un ID de conversación aleatorio de 12 caracteres
+        function generateConversationId() {
+            return Math.random().toString(36).substring(2, 14);
+        }
+        
+        // Generar un ID de cliente aleatorio
+        function generateClientId() {
+            return 'webclient-' + Math.random().toString(36).substring(2, 10);
+        }
+        
+        // Valores de simulación para Genesys Cloud
+        const simulationData = {
+            conversationId: generateConversationId(),
+            clientId: generateClientId(),
+            orgId: 'abcdef12-3456-7890-abcd-ef1234567890',
+            deploymentId: 'messaging-deployment-1',
+            originatingEntity: 'customer',
+            channelType: 'web',
+            locale: 'es-ES',
+            customerName: 'Usuario Websocket'
+        };
         
         // Gestionar la apertura de la conexión
         socket.onopen = function(event) {
             statusElement.textContent = 'Conectado';
             statusElement.className = 'connected';
-            logMessage('Conexión establecida');
+            logMessage('Conexión WebSocket establecida', 'info');
+            sendButton.disabled = false;
         };
         
         // Gestionar los mensajes recibidos
         socket.onmessage = function(event) {
-            logMessage(`Recibido: ${event.data}`);
+            let messageData;
+            try {
+                messageData = JSON.parse(event.data);
+                logMessage(`Recibido: ${event.data}`, 'receive');
+                displayJsonMessage(messageData);
+            } catch (e) {
+                logMessage(`Recibido (texto plano): ${event.data}`, 'receive');
+            }
         };
         
         // Gestionar errores
         socket.onerror = function(error) {
-            logMessage('Error en la conexión');
+            logMessage('Error en la conexión WebSocket', 'error');
             console.error('Error WebSocket:', error);
         };
         
@@ -87,29 +180,98 @@
         socket.onclose = function(event) {
             statusElement.textContent = 'Desconectado';
             statusElement.className = 'disconnected';
-            logMessage(`Conexión cerrada. Código: ${event.code}`);
+            sendButton.disabled = true;
             
-            // Si quieres intentar reconectar automáticamente, puedes añadir código aquí
+            let reason = '';
+            if (event.reason) {
+                reason = ` - Razón: ${event.reason}`;
+            }
+            
+            logMessage(`Conexión cerrada. Código: ${event.code}${reason}`, 'info');
         };
         
-        // Función para enviar "hola mundo"
+        // Función para enviar mensaje tipo "open" de Genesys Cloud
         sendButton.addEventListener('click', function() {
             if (socket.readyState === WebSocket.OPEN) {
-                socket.send('hola mundo');
-                logMessage('Enviado: hola mundo');
+                const message = {
+                    "version": "2",
+                    "type": "open",
+                    "seq": 1,
+                    "id": crypto.randomUUID ? crypto.randomUUID() : generateClientId(),
+                    "parameters": {
+                        "conversationId": simulationData.conversationId,
+                        "deploymentId": simulationData.deploymentId,
+                        "orgId": simulationData.orgId,
+                        "origin": "web",
+                        "originatingEntity": simulationData.originatingEntity,
+                        "channel": {
+                            "type": simulationData.channelType,
+                            "metadata": {
+                                "clientId": simulationData.clientId,
+                                "customerId": "cust-" + Math.random().toString(36).substring(2, 10),
+                                "userAgent": navigator.userAgent
+                            }
+                        },
+                        "member": {
+                            "firstName": simulationData.customerName.split(' ')[0],
+                            "lastName": simulationData.customerName.split(' ').slice(1).join(' '),
+                            "displayName": simulationData.customerName,
+                            "customAttributes": {
+                                "browserLanguage": navigator.language,
+                                "currentUrl": window.location.href,
+                                "sessionStartTime": new Date().toISOString()
+                            }
+                        },
+                        "initialConfiguration": {
+                            "locale": simulationData.locale,
+                            "theme": "light",
+                            "reconnectEnabled": true,
+                            "priority": "normal"
+                        },
+                        "capabilities": ["typing", "media", "attachments"]
+                    }
+                };
+                
+                socket.send(JSON.stringify(message));
+                logMessage('Enviado mensaje de apertura', 'send');
+                displayJsonMessage(message);
+                sendButton.disabled = true;
+                sendButton.textContent = "Mensaje enviado";
             } else {
-                logMessage('No se puede enviar: la conexión no está abierta');
+                logMessage('No se puede enviar: la conexión no está abierta', 'error');
             }
         });
         
+        // Función para mostrar JSON formateado
+        function displayJsonMessage(jsonData) {
+            currentMessageElement.textContent = JSON.stringify(jsonData, null, 2);
+        }
+        
         // Función para añadir mensajes al registro
-        function logMessage(message) {
+        function logMessage(message, type = 'info') {
             const messageElement = document.createElement('div');
-            messageElement.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            messageElement.className = 'log-entry';
+            
+            const timestamp = document.createElement('span');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = `[${new Date().toLocaleTimeString()}] `;
+            
+            const content = document.createElement('span');
+            if (type === 'error') {
+                content.className = 'error';
+            }
+            content.textContent = message;
+            
+            messageElement.appendChild(timestamp);
+            messageElement.appendChild(content);
             messageLogElement.appendChild(messageElement);
+            
             // Auto-scroll al final
             messageLogElement.scrollTop = messageLogElement.scrollHeight;
         }
+        
+        // Inhabilitar el botón hasta que la conexión esté lista
+        sendButton.disabled = true;
     </script>
 </body>
 </html>
