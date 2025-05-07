@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Genesys Cloud WebSocket Test</title>
+    <title>Asistente Virtual OpenAI</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -75,6 +75,7 @@
             cursor: pointer;
             font-size: 16px;
             transition: background-color 0.2s;
+            margin-right: 10px;
         }
         button:hover {
             background-color: #0a2c47;
@@ -96,18 +97,69 @@
             color: #dc3545;
             font-weight: bold;
         }
+        .speech-button {
+            background-color: #28a745;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px auto;
+            font-size: 20px;
+        }
+        .speech-button:hover {
+            background-color: #218838;
+        }
+        .speech-button.recording {
+            background-color: #dc3545;
+            animation: pulse 1.5s infinite;
+        }
+        .transcript {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .user-message {
+            color: #0F3A5D;
+            text-align: right;
+            margin: 5px 0;
+        }
+        .assistant-message {
+            color: #28a745;
+            text-align: left;
+            margin: 5px 0;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1>Genesys Cloud WebSocket Test</h1>
+        <h1>Asistente Virtual OpenAI</h1>
     </header>
     
     <div id="status" class="disconnected">Desconectado</div>
     
     <div class="control-panel">
-        <button id="sendButton">Enviar mensaje de apertura</button>
+        <button id="connectButton">Conectar</button>
+        <button id="disconnectButton" disabled>Desconectar</button>
     </div>
+    
+    <div class="transcript" id="transcript">
+        <div class="assistant-message">Conecta para iniciar una conversación...</div>
+    </div>
+    
+    <button id="talkButton" class="speech-button" disabled>
+        <i>Hablar</i>
+    </button>
     
     <h2>Registro de comunicación</h2>
     <div class="message-log" id="messageLog">
@@ -122,11 +174,56 @@
         // Elementos del DOM
         const statusElement = document.getElementById('status');
         const messageLogElement = document.getElementById('messageLog');
-        const sendButton = document.getElementById('sendButton');
+        const connectButton = document.getElementById('connectButton');
+        const disconnectButton = document.getElementById('disconnectButton');
+        const talkButton = document.getElementById('talkButton');
         const currentMessageElement = document.getElementById('currentMessage');
+        const transcriptElement = document.getElementById('transcript');
         
-        // Crear la conexión WebSocket
-        const socket = new WebSocket('ws://localhost:8080/ws');
+        // Variables globales
+        let socket = null;
+        let mediaRecorder = null;
+        let audioContext = null;
+        let isRecording = false;
+        let audioQueue = [];
+        let audioPlayer = new Audio();
+        
+        // Inicializar el audio
+        async function initializeAudio() {
+            try {
+                // Crear un contexto de audio
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 8000 // Para coincidir con la tasa de muestreo del servidor
+                });
+                
+                // Obtener acceso al micrófono
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                // Configurar el MediaRecorder
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+                
+                // Manejo de datos de audio
+                mediaRecorder.ondataavailable = function(event) {
+                    if (event.data.size > 0 && socket && socket.readyState === WebSocket.OPEN) {
+                        // Convertir a formato de audio compatible
+                        const reader = new FileReader();
+                        reader.onload = function() {
+                            socket.send(reader.result);
+                        };
+                        reader.readAsArrayBuffer(event.data);
+                    }
+                };
+                
+                logMessage('Sistema de audio inicializado correctamente', 'info');
+                return true;
+            } catch (error) {
+                logMessage('Error al inicializar el sistema de audio: ' + error.message, 'error');
+                console.error('Error al inicializar el audio:', error);
+                return false;
+            }
+        }
         
         // Obtener un ID de conversación aleatorio de 12 caracteres
         function generateConversationId() {
@@ -138,7 +235,7 @@
             return 'webclient-' + Math.random().toString(36).substring(2, 10);
         }
         
-        // Valores de simulación para Genesys Cloud
+        // Valores de simulación para la conexión
         const simulationData = {
             conversationId: generateConversationId(),
             clientId: generateClientId(),
@@ -150,50 +247,25 @@
             customerName: 'Usuario Websocket'
         };
         
-        // Gestionar la apertura de la conexión
-        socket.onopen = function(event) {
-            statusElement.textContent = 'Conectado';
-            statusElement.className = 'connected';
-            logMessage('Conexión WebSocket establecida', 'info');
-            sendButton.disabled = false;
-        };
-        
-        // Gestionar los mensajes recibidos
-        socket.onmessage = function(event) {
-            let messageData;
-            try {
-                messageData = JSON.parse(event.data);
-                logMessage(`Recibido: ${event.data}`, 'receive');
-                displayJsonMessage(messageData);
-            } catch (e) {
-                logMessage(`Recibido (texto plano): ${event.data}`, 'receive');
-            }
-        };
-        
-        // Gestionar errores
-        socket.onerror = function(error) {
-            logMessage('Error en la conexión WebSocket', 'error');
-            console.error('Error WebSocket:', error);
-        };
-        
-        // Gestionar el cierre de la conexión
-        socket.onclose = function(event) {
-            statusElement.textContent = 'Desconectado';
-            statusElement.className = 'disconnected';
-            sendButton.disabled = true;
-            
-            let reason = '';
-            if (event.reason) {
-                reason = ` - Razón: ${event.reason}`;
+        // Función para conectar al WebSocket
+        async function connectWebSocket() {
+            // Inicializar el audio antes de conectar
+            const audioInitialized = await initializeAudio();
+            if (!audioInitialized) {
+                return;
             }
             
-            logMessage(`Conexión cerrada. Código: ${event.code}${reason}`, 'info');
-        };
-        
-        // Función para enviar mensaje tipo "open" de Genesys Cloud
-        sendButton.addEventListener('click', function() {
-            if (socket.readyState === WebSocket.OPEN) {
-                const message = {
+            // Crear conexión WebSocket
+            socket = new WebSocket('ws://localhost:8080/web-client');
+            
+            // Gestionar la apertura de la conexión
+            socket.onopen = function(event) {
+                statusElement.textContent = 'Conectado';
+                statusElement.className = 'connected';
+                logMessage('Conexión WebSocket establecida', 'info');
+                
+                // Enviar mensaje de apertura
+                const openMessage = {
                     "version": "2",
                     "type": "open",
                     "seq": 1,
@@ -201,46 +273,171 @@
                     "parameters": {
                         "conversationId": simulationData.conversationId,
                         "deploymentId": simulationData.deploymentId,
-                        "orgId": simulationData.orgId,
-                        "origin": "web",
-                        "originatingEntity": simulationData.originatingEntity,
-                        "channel": {
-                            "type": simulationData.channelType,
-                            "metadata": {
-                                "clientId": simulationData.clientId,
-                                "customerId": "cust-" + Math.random().toString(36).substring(2, 10),
-                                "userAgent": navigator.userAgent
-                            }
-                        },
-                        "member": {
-                            "firstName": simulationData.customerName.split(' ')[0],
-                            "lastName": simulationData.customerName.split(' ').slice(1).join(' '),
-                            "displayName": simulationData.customerName,
-                            "customAttributes": {
-                                "browserLanguage": navigator.language,
-                                "currentUrl": window.location.href,
-                                "sessionStartTime": new Date().toISOString()
-                            }
-                        },
-                        "initialConfiguration": {
-                            "locale": simulationData.locale,
-                            "theme": "light",
-                            "reconnectEnabled": true,
-                            "priority": "normal"
-                        },
-                        "capabilities": ["typing", "media", "attachments"]
+                        "clientId": simulationData.clientId
                     }
                 };
                 
-                socket.send(JSON.stringify(message));
+                socket.send(JSON.stringify(openMessage));
                 logMessage('Enviado mensaje de apertura', 'send');
-                displayJsonMessage(message);
-                sendButton.disabled = true;
-                sendButton.textContent = "Mensaje enviado";
-            } else {
-                logMessage('No se puede enviar: la conexión no está abierta', 'error');
+                displayJsonMessage(openMessage);
+                
+                // Habilitar/deshabilitar botones
+                connectButton.disabled = true;
+                disconnectButton.disabled = false;
+            };
+            
+            // Gestionar los mensajes recibidos
+            socket.onmessage = function(event) {
+                if (event.data instanceof Blob) {
+                    // Procesar datos de audio
+                    handleAudioMessage(event.data);
+                } else {
+                    // Procesar mensajes JSON
+                    try {
+                        const messageData = JSON.parse(event.data);
+                        logMessage(`Recibido: ${event.data}`, 'receive');
+                        displayJsonMessage(messageData);
+                        
+                        // Procesar tipos específicos de mensajes
+                        if (messageData.type === 'opened') {
+                            talkButton.disabled = false;
+                            addAssistantMessage('Hola, ¿en qué puedo ayudarte hoy?');
+                        } else if (messageData.type === 'transcript') {
+                            if (messageData.final) {
+                                addAssistantMessage(messageData.text);
+                            }
+                        } else if (messageData.type === 'recording_status') {
+                            if (messageData.status === 'active') {
+                                talkButton.classList.add('recording');
+                            } else {
+                                talkButton.classList.remove('recording');
+                            }
+                        } else if (messageData.type === 'user_speech_detected') {
+                            // El usuario empezó a hablar, detener la reproducción de audio
+                            stopAllAudio();
+                        }
+                    } catch (e) {
+                        logMessage(`Recibido (texto plano): ${event.data}`, 'receive');
+                    }
+                }
+            };
+            
+            // Gestionar errores
+            socket.onerror = function(error) {
+                logMessage('Error en la conexión WebSocket', 'error');
+                console.error('Error WebSocket:', error);
+            };
+            
+            // Gestionar el cierre de la conexión
+            socket.onclose = function(event) {
+                statusElement.textContent = 'Desconectado';
+                statusElement.className = 'disconnected';
+                
+                let reason = '';
+                if (event.reason) {
+                    reason = ` - Razón: ${event.reason}`;
+                }
+                
+                logMessage(`Conexión cerrada. Código: ${event.code}${reason}`, 'info');
+                
+                // Reiniciar estado
+                talkButton.disabled = true;
+                connectButton.disabled = false;
+                disconnectButton.disabled = true;
+                
+                // Detener grabación si está activa
+                if (isRecording) {
+                    stopRecording();
+                }
+            };
+        }
+        
+        // Función para manejar mensajes de audio
+        function handleAudioMessage(audioBlob) {
+            // Convertir el Blob a un formato que se puede reproducir
+            const audioUrl = URL.createObjectURL(audioBlob);
+            
+            // Añadir a la cola y reproducir
+            audioQueue.push(audioUrl);
+            if (audioQueue.length === 1) {
+                playNextAudio();
             }
-        });
+        }
+        
+        // Función para reproducir el siguiente audio en la cola
+        function playNextAudio() {
+            if (audioQueue.length === 0) return;
+            
+            const audioUrl = audioQueue[0];
+            audioPlayer.src = audioUrl;
+            audioPlayer.onended = function() {
+                // Liberar el objeto URL y eliminar de la cola
+                URL.revokeObjectURL(audioUrl);
+                audioQueue.shift();
+                
+                // Reproducir el siguiente si hay
+                if (audioQueue.length > 0) {
+                    playNextAudio();
+                }
+            };
+            
+            audioPlayer.play().catch(error => {
+                console.error('Error al reproducir audio:', error);
+                // Intentar con el siguiente en caso de error
+                audioQueue.shift();
+                if (audioQueue.length > 0) {
+                    playNextAudio();
+                }
+            });
+        }
+        
+        // Función para detener toda la reproducción de audio
+        function stopAllAudio() {
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+            audioQueue = [];
+        }
+        
+        // Función para iniciar grabación
+        function startRecording() {
+            if (!mediaRecorder || isRecording) return;
+            
+            isRecording = true;
+            talkButton.classList.add('recording');
+            
+            // Notificar al servidor
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: "start_recording"
+                }));
+            }
+            
+            // Iniciar grabación con chunks pequeños para enviar continuamente
+            mediaRecorder.start(100);
+            logMessage('Grabación iniciada', 'info');
+            
+            // Añadir mensaje de usuario (se actualizará cuando se complete)
+            addUserMessage('...');
+        }
+        
+        // Función para detener grabación
+        function stopRecording() {
+            if (!mediaRecorder || !isRecording) return;
+            
+            isRecording = false;
+            talkButton.classList.remove('recording');
+            
+            // Notificar al servidor
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: "stop_recording"
+                }));
+            }
+            
+            // Detener grabación
+            mediaRecorder.stop();
+            logMessage('Grabación detenida', 'info');
+        }
         
         // Función para mostrar JSON formateado
         function displayJsonMessage(jsonData) {
@@ -270,8 +467,59 @@
             messageLogElement.scrollTop = messageLogElement.scrollHeight;
         }
         
-        // Inhabilitar el botón hasta que la conexión esté lista
-        sendButton.disabled = true;
+        // Función para añadir mensaje de usuario al transcript
+        function addUserMessage(text) {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'user-message';
+            messageElement.textContent = text;
+            transcriptElement.appendChild(messageElement);
+            transcriptElement.scrollTop = transcriptElement.scrollHeight;
+        }
+        
+        // Función para añadir mensaje del asistente al transcript
+        function addAssistantMessage(text) {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'assistant-message';
+            messageElement.textContent = text;
+            transcriptElement.appendChild(messageElement);
+            transcriptElement.scrollTop = transcriptElement.scrollHeight;
+        }
+        
+        // Event Listeners
+        connectButton.addEventListener('click', connectWebSocket);
+        
+        disconnectButton.addEventListener('click', function() {
+            if (socket) {
+                socket.close();
+            }
+        });
+        
+        talkButton.addEventListener('mousedown', function() {
+            startRecording();
+        });
+        
+        talkButton.addEventListener('mouseup', function() {
+            stopRecording();
+        });
+        
+        talkButton.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            startRecording();
+        });
+        
+        talkButton.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            stopRecording();
+        });
+        
+        // Para dispositivos móviles, asegurarse de detener la grabación si el usuario mueve el dedo fuera del botón
+        talkButton.addEventListener('touchcancel', function(e) {
+            e.preventDefault();
+            stopRecording();
+        });
+        
+        // Deshabilitar el botón de hablar inicialmente
+        talkButton.disabled = true;
     </script>
 </body>
 </html>
