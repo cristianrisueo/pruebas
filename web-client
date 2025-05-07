@@ -1,0 +1,152 @@
+@CCARouter.websocket("/web-client")
+async def websocket_web_client(websocket: WebSocket):
+    """Maneja la conexión WebSocket con el cliente web y la comunicación con OpenAI."""
+    print(f"🔄 Conectando a cliente web")
+    await websocket.accept()
+    print("✅ Conectado a cliente web")
+ 
+    # Verificar mensaje de apertura
+    try:
+        open_message = await websocket.receive_json()
+        print(f"📥 Mensaje de apertura recibido: {open_message}")
+        if open_message.get("type") == "open":
+            response = {
+                "type": "opened",
+                "version": open_message.get("version", "2"),
+                "id": open_message.get("id", ""),
+                "clientseq": open_message.get("seq", 1),
+                "seq": 1,
+                "status": "success",
+                "message": "Conexión establecida con éxito"
+            }
+            await websocket.send_json(response)
+            print(f"📤 Enviado mensaje de confirmación: {response}")
+    except Exception as e:
+        print(f"❌ Error en la conexión inicial: {e}")
+        await websocket.close()
+        return
+ 
+    # Conectar con OpenAI
+    async with websockets.connect(
+        OPENAI_WS_URL,
+        additional_headers={
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "OpenAI-Beta": "realtime=v1"
+        },
+        ssl=ssl_context,
+    ) as openai_ws:
+        # Inicializar sesión con OpenAI
+        await initialize_session(openai_ws)
+        queue = []
+        last_assistant_item = None
+        recording_active = False
+        
+        # Enviar mensaje inicial para comenzar la conversación
+        await send_initial_conversation_item(openai_ws)
+ 
+        async def receive_from_client():
+            """Recibe mensajes desde el cliente web y los procesa."""
+            nonlocal recording_active, last_assistant_item
+            try:
+                while True:
+                    message = await websocket.receive()
+                    
+                    if "text" in message:
+                        try:
+                            json_message = json.loads(message["text"])
+                            print(f"✅ Mensaje JSON recibido: {json_message}")
+                            
+                            # Manejar comandos específicos
+                            if json_message.get("type") == "start_recording":
+                                recording_active = True
+                                await websocket.send_json({
+                                    "type": "recording_status",
+                                    "status": "active"
+                                })
+                            
+                            elif json_message.get("type") == "stop_recording":
+                                recording_active = False
+                                await websocket.send_json({
+                                    "type": "recording_status",
+                                    "status": "inactive"
+                                })
+                                
+                            elif json_message.get("type") == "ping":
+                                await websocket.send_json({
+                                    "type": "pong",
+                                    "timestamp": json_message.get("timestamp")
+                                })
+                                
+                        except json.JSONDecodeError:
+                            print("⚠️ Error: El mensaje recibido no es un JSON válido.")
+                    
+                    elif "bytes" in message and recording_active:
+                        # Procesar audio recibido (convertir de 48khz a 8khz si es necesario)
+                        audio_data = message["bytes"]
+                        await process_client_audio(openai_ws, audio_data)
+                        
+            except WebSocketDisconnect:
+                print("❌ Cliente web desconectado.")
+                await openai_ws.close()
+ 
+        async def process_client_audio(openai_ws, audio_data):
+            """Procesa el audio del cliente y lo envía a OpenAI."""
+            # Convertir a base64 y enviar a OpenAI
+            audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+            audio_payload = {
+                "type": "input_audio_buffer.append",
+                "audio": audio_base64
+            }
+            await openai_ws.send(json.dumps(audio_payload))
+ 
+        async def send_audio_to_client():
+            """Recibe audio de OpenAI y lo envía al cliente."""
+            nonlocal queue, last_assistant_item
+            try:
+                async for openai_message in openai_ws:
+                    response = json.loads(openai_message)
+                    
+                    # Enviar texto al cliente para mostrar en la interfaz
+                    if response.get("type") == "response.progress" and "text" in response:
+                        await websocket.send_json({
+                            "type": "transcript",
+                            "text": response["text"],
+                            "final": response.get("final", False)
+                        })
+                    
+                    # Enviar audio al cliente
+                    if response.get("type") == "response.audio.delta" and "delta" in response:
+                        # Enviar chunks de audio directamente al cliente
+                        audio_bytes = base64.b64decode(response["delta"])
+                        await websocket.send_bytes(audio_bytes)
+                        
+                        if response.get("item_id"):
+                            last_assistant_item = response["item_id"]
+                            
+                    # Manejar eventos de inicio de habla
+                    if response.get("type") == "input_audio_buffer.speech_started":
+                        if last_assistant_item:
+                            await handle_speech_started_event(openai_ws, last_assistant_item)
+ 
+            except Exception as e:
+                print(f"❌ Error procesando mensajes de OpenAI: {e}")
+ 
+        async def handle_speech_started_event(openai_ws, item_id):
+            """Maneja el evento de inicio de habla."""
+            # Detener la respuesta actual cuando el usuario empieza a hablar
+            delete_event = {
+                "type": "conversation.item.delete",
+                "item_id": item_id
+            }
+            await openai_ws.send(json.dumps(delete_event))
+            
+            # Notificar al cliente
+            await websocket.send_json({
+                "type": "user_speech_detected"
+            })
+ 
+        # Ejecutar todas las tareas concurrentemente
+        await asyncio.gather(
+            receive_from_client(),
+            send_audio_to_client()
+        )
