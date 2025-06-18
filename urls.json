@@ -1,0 +1,10 @@
+[
+  {
+    "url": "https://example.com",
+    "profundidad": 2
+  },
+  {
+    "url": "https://example.org",
+    "profundidad": 1
+  }
+]
